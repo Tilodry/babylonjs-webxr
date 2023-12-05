@@ -29,8 +29,8 @@
             textField.height = "5%";
             textField.color = "white";
             textField.background = "black";
-            textField.top = "-10%";
-            //textField.left = "-37.5%";
+            textField.top = "-45%";
+            textField.left = "-37.5%";
             textField.text = "GLTFName";
             advancedTexture.addControl(textField);
 
@@ -40,8 +40,8 @@
             importButton.height = "5%";
             importButton.color = "white";
             importButton.background = "black";
-            //importButton.top = "-37.5%";
-            //importButton.left = "-37.5%";
+            importButton.top = "-37.5%";
+            importButton.left = "-37.5%";
             importButton.onPointerUpObservable.add(() => {
                 importGLTF(textField.text);
             });
