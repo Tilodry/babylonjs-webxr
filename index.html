@@ -29,23 +29,22 @@
             textField.height = "5%";
             textField.color = "white";
             textField.background = "black";
-            textField.top = "-45%";
-            textField.left = "-37.5%";
+            //textField.top = "-45%";
+            //textField.left = "-37.5%";
             textField.text = "GLTFName";
-
             advancedTexture.addControl(textField);
+
 
             const importButton = BABYLON.GUI.Button.CreateSimpleButton("importButton", "Importer GLTF");
             importButton.width = "20%";
             importButton.height = "5%";
             importButton.color = "white";
             importButton.background = "black";
-            importButton.top = "-37.5%";
-            importButton.left = "-37.5%";
+            //importButton.top = "-37.5%";
+            //importButton.left = "-37.5%";
             importButton.onPointerUpObservable.add(() => {
                 importGLTF(textField.text);
             });
-
             advancedTexture.addControl(importButton);
         }
         function createScene() {
@@ -108,19 +107,23 @@
         }
 
         function importGLTF(gltfName) {
-            meshNameList = []
-            for (mesh in scene.meshes) {
-                meshNameList.push(mesh.name);
-            }
-            const appendAsync = BABYLON.SceneLoader.AppendAsync("./GL/", gltfName);
-            appendAsync.then((result) => {
+            if (gltfName.endsWith("gltf") || gltfName.endsWith("glb")) {
+                meshNameList = []
                 for (mesh in scene.meshes) {
-                    if (!(mesh.name in meshNameList)) {
-                        addObjectToGizmo(mesh);
-                    }
+                    meshNameList.push(mesh.name);
                 }
-            })
-
+                const appendAsync = BABYLON.SceneLoader.AppendAsync("./GL/", gltfName);
+                appendAsync.then((result) => {
+                    for (mesh in scene.meshes) {
+                        if (!(mesh.name in meshNameList)) {
+                            addObjectToGizmo(mesh);
+                        }
+                    }
+                })
+            }
+            else {
+                console.warn("You need to specify the file extension (gltf or glb)");
+            }
         }
     </script>
 </head>
