@@ -1,100 +1,130 @@
 <html>
-  <head>
+<head>
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
     <script type="text/javascript">
-      let canvas;
-      let engine;
-      let scene;
-      let isAnimationPlaying = true;
-      window.onload = function() {
-        canvas = document.getElementById("renderCanvas");
-        engine = new BABYLON.Engine(canvas, true);    
-        createScene();  
-        addObjects();   
-        initializeXR();
-        engine.runRenderLoop(function () {
-          if (scene && scene.activeCamera) {
-            scene.render();
-          }
-        });        
-      }
-      function createScene() {
-        scene = new BABYLON.Scene(engine);
-        scene.enablePhysics();
-        scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
-        scene.clearColor = new BABYLON.Color3.Black();
-        let light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, -0.5),scene);
-        let camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -10), scene);
-        camera.applyGravity = true;
-        camera.checkCollisions = true;
-        camera.ellipsoid = new BABYLON.Vector3(1, 1, 1);
-        //let camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/2,Math.PI/2, 3, new BABYLON.Vector3(0, 0, 0));
-        camera.attachControl(canvas, true);        
-      }
+        let canvas;
+        let engine;
+        let scene;
+        let isAnimationPlaying = true;
+        let gizmoManager;
 
-      async function initializeXR(){
-        let xr = await scene.createDefaultXRExperienceAsync({});  
-        if (!xr.baseExperience) {}
-        else {
-          xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
-            xrInput: xr.input
-          });
-        }        
-      }
-      function addObjects(){    
-        let ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 30, height: 30});       
-        let box = BABYLON.MeshBuilder.CreateBox("box", {width: 0.3, height: 0.3, depth: 0.3});
-        box.position.x = 0.0;
-        box.position.y = 1;
-        let boxMaterial = new BABYLON.StandardMaterial("material");
-        boxMaterial.diffuseColor = BABYLON.Color3.Random();
-        box.material = boxMaterial;  
-        let octa = BABYLON.MeshBuilder.CreatePolyhedron("octa", {type:1,size: 0.15}); 
-        octa.position.x=0.5;
-        octa.position.y=1; 
-        let sixDofDragBehavior = new BABYLON.SixDofDragBehavior();
-        sixDofDragBehavior.allowMultiPointer=false;
-        sixDofDragBehavior.rotateWithMotionController=false;
-        box.addBehavior(sixDofDragBehavior);    
-        //importGLTF("./", "AnimatedCube.gltf", scene, octa, box);
-        importGLTF("./", "Duck.glb", scene, octa, box);
-      }
+        window.onload = function () {
+            canvas = document.getElementById("renderCanvas");
+            engine = new BABYLON.Engine(canvas, true);
+            createScene();
+            addObjects();
+            initializeXR();
+            engine.runRenderLoop(function () {
+                if (scene && scene.activeCamera) {
+                    scene.render();
+                }
+            });
 
-    function importGLTF(path, gltfName, scene, octa, box){
-          const appendAsync = BABYLON.SceneLoader.AppendAsync(path, gltfName, scene);
-          appendAsync.then((result) => {
-          let duck = scene.meshes[7];
-          console.log(scene.meshes);
-          var duckGizmoManager = new BABYLON.GizmoManager(scene);
-          duckGizmoManager.boundingBoxGizmoEnabled = true;
-          duckGizmoManager.boundingBoxDragBehavior.allowMultiPointer=false;
-          duckGizmoManager.gizmos.boundingBoxGizmo.setEnabledScaling(true,true);
-          duckGizmoManager.gizmos.boundingBoxGizmo.scaleBoxSize=0.04;
-          duckGizmoManager.gizmos.boundingBoxGizmo.rotationSphereSize=0.05;
-          duckGizmoManager.attachableMeshes = [duck, octa, box];
+            const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
-          window.addEventListener("keyup", function(event){
-            if (event.code === "Space") {
-              console.log("Spacebar pressed");
-              if (isAnimationPlaying){
-                console.log("Stopping GLTF animation");
-                console.log(scene.activeCamera.position);
-                scene.stopAnimation(duck);
-              }
-              else {
-                console.log("Starting GLTF animation");
-                scene.beginAnimation(duck, 0, 100, true, 1.0);
-              }
-              isAnimationPlaying = !isAnimationPlaying;
+            const textField = new BABYLON.GUI.InputText();
+            textField.width = "20%";
+            textField.height = "5%";
+            textField.color = "white";
+            textField.background = "black";
+            textField.top = "-45%";
+            textField.left = "-37.5%";
+            textField.text = "GLTFName";
+
+            advancedTexture.addControl(textField);
+
+            const importButton = BABYLON.GUI.Button.CreateSimpleButton("importButton", "Importer GLTF");
+            importButton.width = "20%";
+            importButton.height = "5%";
+            importButton.color = "white";
+            importButton.background = "black";
+            importButton.top = "-37.5%";
+            importButton.left = "-37.5%";
+            importButton.onPointerUpObservable.add(() => {
+                importGLTF(textField.text);
+            });
+
+            advancedTexture.addControl(importButton);
+        }
+        function createScene() {
+            scene = new BABYLON.Scene(engine);
+            scene.clearColor = new BABYLON.Color3.Black();
+
+            initializeGizmoManager();
+
+            let light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(1, 1, -0.5), scene);
+            let camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 3, -10), scene);
+            camera.attachControl(canvas, true);
+        }
+
+        function initializeGizmoManager() {
+            gizmoManager = new BABYLON.GizmoManager(scene);
+            gizmoManager.boundingBoxGizmoEnabled = true;
+            gizmoManager.boundingBoxDragBehavior.allowMultiPointer = false;
+            gizmoManager.gizmos.boundingBoxGizmo.setEnabledScaling(true, true);
+            gizmoManager.gizmos.boundingBoxGizmo.scaleBoxSize = 0.04;
+            gizmoManager.gizmos.boundingBoxGizmo.rotationSphereSize = 0.05;
+        }
+
+        function addObjectToGizmo(object) {
+            if (gizmoManager.attachableMeshes) {
+                if (!(object in gizmoManager.attachableMeshes)) {
+                    console.log(gizmoManager.attachableMeshes);
+                    gizmoManager.attachableMeshes.push(object);
+                } else {
+                    gizmoManager.attachableMeshes = [object]
+                }
             }
-          })
-      })
+        }
 
-    }
+        async function initializeXR() {
+            let xr = await scene.createDefaultXRExperienceAsync({});
+            if (!xr.baseExperience) { }
+            else {
+                xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
+                    xrInput: xr.input
+                });
+            }
+        }
+        function addObjects() {
+            let ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 30, height: 30 });
+            let box = BABYLON.MeshBuilder.CreateBox("box", { width: 0.3, height: 0.3, depth: 0.3 });
+            box.position.x = 0.0;
+            box.position.y = 1;
+            let boxMaterial = new BABYLON.StandardMaterial("material");
+            boxMaterial.diffuseColor = BABYLON.Color3.Random();
+            box.material = boxMaterial;
+            let octa = BABYLON.MeshBuilder.CreatePolyhedron("octa", { type: 1, size: 0.15 });
+            octa.position.x = 0.5;
+            octa.position.y = 1;
+            let sixDofDragBehavior = new BABYLON.SixDofDragBehavior();
+            sixDofDragBehavior.allowMultiPointer = false;
+            sixDofDragBehavior.rotateWithMotionController = false;
+            box.addBehavior(sixDofDragBehavior);
+            importGLTF("Duck.glb");
+            importGLTF("AnimatedCube.gltf");
+        }
+
+        function importGLTF(gltfName) {
+            meshNameList = []
+            for (mesh in scene.meshes) {
+                meshNameList.push(mesh.name);
+            }
+            const appendAsync = BABYLON.SceneLoader.AppendAsync("./GL/", gltfName);
+            appendAsync.then((result) => {
+                for (mesh in scene.meshes) {
+                    if (!(mesh.name in meshNameList)) {
+                        addObjectToGizmo(mesh);
+                    }
+                }
+            })
+
+        }
     </script>
-  </head>
-  <body>
-    <canvas id="renderCanvas" style="width: 100%; height: 100%;"></canvas> 
-  </body>
+</head>
+<body>
+    <canvas id="renderCanvas" style="width: 100%; height: 100%;"></canvas>
+</body>
 </html>
