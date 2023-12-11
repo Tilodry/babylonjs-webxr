@@ -80,7 +80,7 @@
         }
 
         async function initializeXR() {
-            let xr = await scene.createDefaultXRExperienceAsync({});
+            let xr = await scene.createDefaultXRExperienceAsync({ enableTeleportation: true });
             if (!xr.baseExperience) { }
             else {
                 xr.baseExperience.featuresManager.enableFeature(BABYLON.WebXRFeatureName.HAND_TRACKING, "latest", {
