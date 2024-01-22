@@ -3,6 +3,7 @@
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.babylonjs.com/cannon.js"></script>
     <script type="text/javascript">
         let canvas;
         let engine;
@@ -50,6 +51,7 @@
 
         function createScene() {
             scene = new BABYLON.Scene(engine);
+            scene.enablePhysics(new BABYLON.Vector3(0, -1, 0), new BABYLON.CannonJSPlugin());
             scene.clearColor = new BABYLON.Color3.Black();
 
             initializeGizmoManager();
@@ -71,7 +73,6 @@
         function addObjectToGizmo(object) {
             if (gizmoManager.attachableMeshes) {
                 if (!(object in gizmoManager.attachableMeshes)) {
-                    console.log(gizmoManager.attachableMeshes);
                     gizmoManager.attachableMeshes.push(object);
                 } else {
                     gizmoManager.attachableMeshes = [object]
@@ -89,8 +90,20 @@
             }
         }
 
+        function applyPhysicsToGround() {
+            let groundImpostor = new BABYLON.PhysicsImpostor(
+                scene.getMeshByName("ground"),
+                BABYLON.PhysicsImpostor.PlaneImpostor,
+                { mass: 0, restitution: 0.1 },
+                scene
+            );
+            groundImpostor.physicsBody.friction = 1;
+
+        }
         function addObjects() {
             let ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 30, height: 30 });
+            ground.position.y = -5;
+            applyPhysicsToGround();
             let box = BABYLON.MeshBuilder.CreateBox("box", { width: 0.3, height: 0.3, depth: 0.3 });
             box.position.x = 0.0;
             box.position.y = 1;
@@ -110,22 +123,33 @@
 
         async function importGLTF(gltfName) {
             if (gltfName.endsWith("gltf") || gltfName.endsWith("glb")) {
-                meshNameList = []
-                for (mesh in scene.meshes) {
+                meshNameList = [];
+                for (const mesh of scene.meshes) {
                     meshNameList.push(mesh.name);
                 }
-                const appendAsync = BABYLON.SceneLoader.AppendAsync("./GL/", gltfName);
+
+                const appendAsync = BABYLON.SceneLoader.AppendAsync("https://github.com/KhronosGroup/glTF-Sample-Models/blob/main/2.0/Duck/glTF-Binary/Duck.glb");
                 appendAsync.then((result) => {
-                    for (mesh in scene.meshes) {
-                        if (!(mesh.name in meshNameList)) {
+                    for (const mesh of scene.meshes) {
+                        if (!meshNameList.includes(mesh.name)) {
                             addObjectToGizmo(mesh);
+                            applyGravity(mesh);
                         }
                     }
-                })
-            }
-            else {
+                });
+            } else {
                 console.warn("You need to specify the file extension (gltf or glb)");
             }
+        }
+
+        function applyGravity(mesh) {
+            mesh.physicsImpostor = new BABYLON.PhysicsImpostor(
+                mesh,
+                BABYLON.PhysicsImpostor.BoxImpostor,
+                { mass: 1, restitution: 1 },
+                scene
+            );
+            mesh.physicsImpostor.forceUpdate();
         }
     </script>
 </head>
