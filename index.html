@@ -10,22 +10,48 @@
 <body>
     <canvas id="renderCanvas" style="width: 100%; height: 100%;"></canvas>
     <script type="text/javascript">
-        let canvas, engine, scene, gizmoManager, project;
+        let canvas, engine, scene, gizmoManager, project, projectManager;
 
         window.onload = function () {
-            canvas = document.getElementById("renderCanvas");
-            engine = new BABYLON.Engine(canvas, true);
-            init();
+            init().catch(console.error);
         };
 
         async function init() {
-            project = new Project("MonProjet", [
-                new Scene("Scene1"),
-                new Scene("Scene2")
-            ]);
-            await project.switchScene("Scene1");
+            // Crée le moteur et la toile de rendu
+            canvas = document.getElementById("renderCanvas");
+            engine = new BABYLON.Engine(canvas, true);
+
+            // Crée le gestionnaire de projets
+            projectManager = new ProjectManager();
+
+            // Crée les projets
+            let project1 = new Project("P1");
+            let project2 = new Project("P2");
+
+            // Ajoute des scènes au premier projet
+            let scene1Project1 = new Scene("P1S1");
+            // Ici, tu peux initialiser des éléments spécifiques à la scène, comme des objets, lumières, etc.
+            project1.addScene(scene1Project1);
+
+            let scene2Project1 = new Scene("P1S2");
+            // Initialise la scène 2 pour le projet 1...
+            project1.addScene(scene2Project1);
+
+            // Ajoute des scènes au deuxième projet (si nécessaire)
+            let scene1Project2 = new Scene("P2S1");
+            project2.addScene(scene1Project2);
+
+            // Ajoute les projets au gestionnaire de projets
+            projectManager.addProject(project1);
+            projectManager.addProject(project2);
+
+            // Change pour le premier projet et sa première scène pour commencer
+            await projectManager.switchToScene("P1", "P1S1");
+
+            // Configure l'UI et tout autre élément nécessaire à ton application ici
             setupUI();
 
+            // Lance la boucle de rendu
             engine.runRenderLoop(() => {
                 if (scene && scene.activeCamera) {
                     scene.render();
@@ -38,8 +64,11 @@
                 this.name = name;
             }
 
-            async load() {
+            async init() {
+                if (this.initialized) return; // Si déjà initialisée, ne rien faire
+
                 scene = new BABYLON.Scene(engine);
+                this.scene = scene; // Stocke la scène créée dans une propriété de l'instance
                 scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), new BABYLON.CannonJSPlugin());
                 scene.clearColor = new BABYLON.Color3.Black();
 
@@ -49,10 +78,22 @@
 
                 this.initializeGizmoManager();
                 this.addObjects();
+
+                this.initialized = true; // Marque la scène comme initialisée
             }
 
-            async loadExisting() {
-                scene = this;
+            activate() {
+                if (!this.initialized) {
+                    console.error("Scene must be initialized before activation.");
+                    return;
+                }
+                engine.stopRenderLoop(); // Arrête le boucle de rendu actuelle
+                scene = this.scene; // Met à jour la scène globale avec l'instance de la scène
+                engine.runRenderLoop(() => { // Redémarre le boucle de rendu avec la nouvelle scène
+                    if (scene && scene.activeCamera) {
+                        scene.render();
+                    }
+                });
             }
 
             initializeGizmoManager() {
@@ -80,22 +121,56 @@
         }
 
         class Project {
-            constructor(name, scenes) {
+            constructor(name) {
                 this.name = name;
-                this.scenes = scenes;
+                this.scenes = [];
                 this.currentScene = null;
             }
 
+            addScene(scene) {
+                this.scenes.push(scene);
+            }
+
             async switchScene(sceneName) {
-                if (this.currentScene) {
-                    // Clean up or unload previous scene if needed
-                }
                 const newScene = this.scenes.find(scene => scene.name === sceneName);
                 if (newScene) {
-                    await newScene.load();
+                    await newScene.init();
+                    newScene.activate();
                     this.currentScene = newScene;
                     setupUI();
+                    // Mettre à jour l'interface utilisateur, si nécessaire
                 }
+            }
+        }
+
+        class ProjectManager {
+            constructor() {
+                this.projects = [];
+                this.currentProject = null;
+            }
+
+            addProject(project) {
+                this.projects.push(project);
+            }
+
+            async switchProject(projectName) {
+                const newProject = this.projects.find(project => project.name === projectName);
+                if (!newProject) {
+                    console.error("Project not found:", projectName);
+                    return;
+                }
+                this.currentProject = newProject;
+                // Optionnel : Initialiser la première scène du nouveau projet ou une scène spécifique
+                if (newProject.scenes.length > 0) {
+                    await newProject.switchScene(newProject.scenes[0].name);
+                }
+                // Mettre à jour l'interface utilisateur, si nécessaire
+            }
+
+            // Méthode pour basculer directement à une scène spécifique d'un projet spécifique
+            async switchToScene(projectName, sceneName) {
+                await this.switchProject(projectName);
+                await this.currentProject.switchScene(sceneName);
             }
         }
 
@@ -127,8 +202,9 @@
             importButton.left = "25px";
             importButton.top = "75px";
             importButton.onPointerClickObservable.add(() => {
-                if (project.currentScene) {
-                    project.currentScene.importGLTF(gltfPathInput.text);
+                if (projectManager.currentProject.currentScene) {
+                    console.log("Adding object ?");
+                    projectManager.currentProject.currentScene.importGLTF(gltfPathInput.text);
                 }
             });
             advancedTexture.addControl(importButton);
@@ -158,9 +234,38 @@
             switchSceneButton.left = "25px";
             switchSceneButton.top = "175px";
             switchSceneButton.onPointerClickObservable.add(async () => {
-                await project.switchScene(sceneNameInput.text);
+                await projectManager.currentProject.switchScene(sceneNameInput.text);
             });
             advancedTexture.addControl(switchSceneButton);
+
+            const projectNameInput = new BABYLON.GUI.InputText();
+            projectNameInput.width = 0.2;
+            projectNameInput.maxWidth = 0.2;
+            projectNameInput.height = "40px";
+            projectNameInput.color = "white";
+            projectNameInput.background = "black";
+            projectNameInput.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            projectNameInput.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            projectNameInput.left = "25px";
+            projectNameInput.top = "225px"; // Ajuste la position pour ne pas superposer aux autres contrôles
+            projectNameInput.placeholderText = "Enter project name...";
+            advancedTexture.addControl(projectNameInput);
+
+            // Bouton pour changer de projet
+            const switchProjectButton = BABYLON.GUI.Button.CreateSimpleButton("switchProjectButton", "Switch Project");
+            switchProjectButton.width = 0.2;
+            switchProjectButton.height = "40px";
+            switchProjectButton.color = "white";
+            switchProjectButton.background = "black";
+            switchProjectButton.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            switchProjectButton.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            switchProjectButton.left = "25px";
+            switchProjectButton.top = "275px"; // Ajuste la position pour ne pas superposer aux autres contrôles
+            switchProjectButton.onPointerClickObservable.add(async () => {
+                await projectManager.switchProject(projectNameInput.text); // Utilise projectManager pour changer de projet
+                // Il est possible que tu doives actualiser l'interface utilisateur ici pour refléter le changement de projet
+            });
+            advancedTexture.addControl(switchProjectButton);
         }
         /*
         function serializeScene() {
