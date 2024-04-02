@@ -6,6 +6,17 @@
     <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
     <script src="https://cdn.babylonjs.com/cannon.js"></script>
+    <script>
+        (function () {
+            var colyseusScript = document.createElement('script');
+            colyseusScript.src = "https://unpkg.com/colyseus.js@^0.15.0-preview.2/dist/colyseus.js";
+            colyseusScript.async = true;
+            colyseusScript.onload = function () {
+                console.log("Colyseus SDK chargé avec succès.");
+            };
+            document.head.appendChild(colyseusScript);
+        })();
+    </script>
 </head>
 <body>
     <canvas id="renderCanvas" style="width: 100%; height: 100%;"></canvas>
@@ -174,10 +185,61 @@
             }
         }
 
+        class NetworkManager {
+            constructor(serverUrl) {
+                this.client = null;
+                this.room = null;
+                this.serverUrl = serverUrl;
+            }
+
+            async initialize() {
+                try {
+                    this.client = new Colyseus.Client(this.serverUrl);
+                    console.log("Client Colyseus initialisé.");
+                } catch (error) {
+                    console.error("Erreur lors de l'initialisation de Colyseus :", error);
+                }
+            }
+
+            async joinOrCreateRoom(roomName) {
+                try {
+                    this.room = await this.client.joinOrCreate(roomName);
+                    console.log(`Connecté à la salle : ${this.room.id}`);
+
+                    // Gérer ici les événements de la salle, par exemple :
+                    this.room.onStateChange.once((state) => {
+                        console.log("État initial de la salle :", state);
+                    });
+
+                    this.room.onStateChange((state) => {
+                        // Écoute les changements d'état
+                    });
+
+                    this.room.onMessage((message) => {
+                        // Gérer les messages reçus
+                    });
+
+                    // Ajouter d'autres gestionnaires d'événements au besoin...
+
+                } catch (error) {
+                    console.error("Erreur lors de la connexion à la salle :", error);
+                }
+            }
+
+            // Méthodes pour envoyer des messages au serveur
+            sendMessage(type, data) {
+                if (this.room) {
+                    this.room.send(type, data);
+                }
+            }
+
+            // Ajoute ici d'autres méthodes au besoin...
+        }
+
         function setupUI() {
             const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
-            // Champ de texte pour le chemin GLTF/GLB
+            // Champ de texte pour importation
             const gltfPathInput = new BABYLON.GUI.InputText();
             gltfPathInput.width = 0.2;
             gltfPathInput.maxWidth = 0.2;
@@ -191,7 +253,7 @@
             gltfPathInput.placeholderText = "Enter GLTF/Glb path...";
             advancedTexture.addControl(gltfPathInput);
 
-            // Bouton d'importation GLTF/GLB
+            // Bouton pour importation
             const importButton = BABYLON.GUI.Button.CreateSimpleButton("importButton", "Import GLTF");
             importButton.width = 0.2;
             importButton.height = "40px";
@@ -203,13 +265,13 @@
             importButton.top = "75px";
             importButton.onPointerClickObservable.add(() => {
                 if (projectManager.currentProject.currentScene) {
-                    console.log("Adding object ?");
+                    console.log("Adding object");
                     projectManager.currentProject.currentScene.importGLTF(gltfPathInput.text);
                 }
             });
             advancedTexture.addControl(importButton);
 
-            // Champ de texte pour le nom de la scène à charger
+            // Champ de texte pour changement de scène
             const sceneNameInput = new BABYLON.GUI.InputText();
             sceneNameInput.width = 0.2;
             sceneNameInput.maxWidth = 0.2;
@@ -223,7 +285,7 @@
             sceneNameInput.placeholderText = "Enter scene name...";
             advancedTexture.addControl(sceneNameInput);
 
-            // Bouton pour changer de scène
+            // Bouton pour changemant de scène
             const switchSceneButton = BABYLON.GUI.Button.CreateSimpleButton("switchSceneButton", "Switch Scene");
             switchSceneButton.width = 0.2;
             switchSceneButton.height = "40px";
@@ -238,6 +300,7 @@
             });
             advancedTexture.addControl(switchSceneButton);
 
+            // Champ de texte pour changement de projet
             const projectNameInput = new BABYLON.GUI.InputText();
             projectNameInput.width = 0.2;
             projectNameInput.maxWidth = 0.2;
@@ -247,11 +310,11 @@
             projectNameInput.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
             projectNameInput.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
             projectNameInput.left = "25px";
-            projectNameInput.top = "225px"; // Ajuste la position pour ne pas superposer aux autres contrôles
+            projectNameInput.top = "225px";
             projectNameInput.placeholderText = "Enter project name...";
             advancedTexture.addControl(projectNameInput);
 
-            // Bouton pour changer de projet
+            // Bouton pour changement de projet
             const switchProjectButton = BABYLON.GUI.Button.CreateSimpleButton("switchProjectButton", "Switch Project");
             switchProjectButton.width = 0.2;
             switchProjectButton.height = "40px";
@@ -260,10 +323,9 @@
             switchProjectButton.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
             switchProjectButton.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
             switchProjectButton.left = "25px";
-            switchProjectButton.top = "275px"; // Ajuste la position pour ne pas superposer aux autres contrôles
+            switchProjectButton.top = "275px";
             switchProjectButton.onPointerClickObservable.add(async () => {
-                await projectManager.switchProject(projectNameInput.text); // Utilise projectManager pour changer de projet
-                // Il est possible que tu doives actualiser l'interface utilisateur ici pour refléter le changement de projet
+                await projectManager.switchProject(projectNameInput.text);
             });
             advancedTexture.addControl(switchProjectButton);
         }
@@ -301,6 +363,43 @@
                     }
                 });
             });
+        }
+
+        function serializeProject(project) {
+            // Sérialise chaque scène du projet
+            let serializedScenes = project.scenes.map(scene => {
+                // Utiliser une version adaptée de serializeScene qui retourne les données de la scène
+                return serializeScene(scene); // Assure que serializeScene accepte un objet Scene
+            });
+
+            // Créer un objet représentant le projet
+            let serializedProject = {
+                name: project.name,
+                currentSceneName: project.currentScene ? project.currentScene.name : null,
+                scenes: serializedScenes
+            };
+
+            // Convertir en chaîne JSON pour le stockage ou le transfert
+            let serializedProjectAsString = JSON.stringify(serializedProject);
+            console.log(serializedProjectAsString);
+            return serializedProjectAsString;
+            }
+
+        async function deserializeProject(serializedProjectAsString) {
+            let serializedProject = JSON.parse(serializedProjectAsString);
+
+            // Créer un nouveau projet vide
+            let project = new Project(serializedProject.name);
+
+            // Désérialiser chaque scène et l'ajouter au projet
+            for (let serializedSceneAsString of serializedProject.scenes) {
+                let scene = await deserializeScene(serializedSceneAsString, project); // Adapte cette fonction
+                project.addScene(scene);
+            }
+
+            // Si nécessaire, définis la scène courante basée sur serializedProject.currentSceneName
+
+            return project;
         }
         */
     </script>
